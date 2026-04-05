@@ -55,6 +55,12 @@ Handle HTTP error codes from the OpenAPI schema. Surface meaningful messages to 
 
 The `_search_cache` in `server.py` caches `search_tracks` results for 5 minutes. Do not cache other Spotify content beyond immediate use per the Spotify Developer Terms.
 
+## Testing
+
+After any change to `server.py`:
+1. Run `pytest` and ensure all 44 tests pass before considering the task done
+2. For every new tool added, add corresponding tests in `tests/test_server.py` covering at minimum: normal response, empty/no-result response, and any tool-specific logic (deduplication, pagination, fallbacks)
+
 ## Developer Terms
 
 - Always attribute content to Spotify
