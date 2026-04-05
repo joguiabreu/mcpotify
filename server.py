@@ -23,8 +23,6 @@ logging.basicConfig(
 )
 log = logging.getLogger("mcp-spotify")
 
-_search_cache: dict[tuple, tuple] = {}  # key -> (result, timestamp)
-_CACHE_TTL = 300  # seconds
 
 # --- Spotify client setup ---
 log.info("Initialising Spotify OAuth client")
@@ -345,23 +343,15 @@ def _format_track(i: int, track: dict) -> str:
 async def search_tracks(args: dict) -> list[types.TextContent]:
     query = args["query"]
     limit = args.get("limit", 10)
-    cache_key = ("search", query, limit)
-    now = time.monotonic()
 
-    cached = _search_cache.get(cache_key)
-    if cached and now - cached[1] < _CACHE_TTL:
-        log.debug("search_tracks cache hit | query=%r", query)
-        results = cached[0]
-    else:
-        log.debug("search_tracks cache miss | query=%r limit=%s", query, limit)
-        t0 = time.perf_counter()
-        try:
-            results = await _spotify(sp.search, q=query, type="track", limit=limit)
-        except Exception:
-            log.error("sp.search failed (%.2fs)\n%s", time.perf_counter() - t0, traceback.format_exc())
-            raise
-        log.debug("sp.search returned in %.2fs", time.perf_counter() - t0)
-        _search_cache[cache_key] = (results, now)
+    log.debug("search_tracks | query=%r limit=%s", query, limit)
+    t0 = time.perf_counter()
+    try:
+        results = await _spotify(sp.search, q=query, type="track", limit=limit)
+    except Exception:
+        log.error("sp.search failed (%.2fs)\n%s", time.perf_counter() - t0, traceback.format_exc())
+        raise
+    log.debug("sp.search returned in %.2fs", time.perf_counter() - t0)
 
     tracks = results["tracks"]["items"]
     if not tracks:
