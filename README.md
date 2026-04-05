@@ -57,58 +57,25 @@ You need to tell Spotify that a program is allowed to access your account. This 
 6. You'll see a **Client ID** — copy it and keep the page open.
 7. Click **View client secret** — copy that too.
 
-### Step 3 — Add your credentials
+### Step 3 — Run the setup script
 
-Inside the project folder, create a file called `.env` (exactly that name, with the dot). Open it with any text editor (Notepad on Windows, TextEdit on Mac) and paste this, replacing the placeholders with your values from Step 2:
-
-```
-SPOTIFY_CLIENT_ID=paste_your_client_id_here
-SPOTIFY_CLIENT_SECRET=paste_your_client_secret_here
-SPOTIFY_REDIRECT_URI=http://127.0.0.1:8888/callback
-```
-
-Save the file.
-
-### Step 4 — Install dependencies
-
-Open a **Terminal** (Mac) or **Command Prompt** (Windows) and run these commands one at a time. Replace `/path/to/mcp-spotify` with the actual path to the folder you unzipped.
+Open a **Terminal** (Mac/Linux) or **Command Prompt** (Windows), navigate to the project folder, and run:
 
 ```
-cd /path/to/mcp-spotify
-python3 -m venv .venv
+python3 setup.py
 ```
 
-On **Mac/Linux:**
-```
-source .venv/bin/activate
-pip install -r requirements.txt
-```
+The script will:
+- Ask for your Client ID and Client Secret from Step 2
+- Create a virtual environment and install dependencies
+- Open a browser to log in to Spotify (approve access and wait for confirmation)
+- Register the MCP server with Claude Code automatically
 
-On **Windows:**
-```
-.venv\Scripts\activate
-pip install -r requirements.txt
-```
+That's it.
 
-### Step 5 — Log in to Spotify (first time only)
+### Connecting other AI apps
 
-Still in the terminal, run:
-
-```
-python3 auth.py
-```
-
-A browser window will open asking you to log in to Spotify and approve access. After you approve it, the browser will show a success message and the terminal will confirm the login. That's it — no copying or pasting URLs.
-
-This only happens once. After that, your AI assistant handles everything automatically.
-
-### Step 6 — Connect to your AI app
-
-**Claude Code:**
-```
-claude mcp add --scope user spotify /path/to/mcp-spotify/.venv/bin/python /path/to/mcp-spotify/server.py
-```
-On Windows, replace `.venv/bin/python` with `.venv/Scripts/python`.
+If you use ChatGPT, Cursor, or Windsurf instead of Claude Code, register the server manually after running `setup.py`:
 
 **ChatGPT desktop app:**
 Go to Settings → MCP Servers and add a new server with:
@@ -143,11 +110,14 @@ Open your AI app and try asking:
 ## Troubleshooting
 
 **The AI says it doesn't have Spotify tools**
-- Make sure you completed Step 6 for your specific app.
+- Make sure `setup.py` completed without errors.
 - Restart the app and try again.
 
 **"Invalid client" or "credentials" error**
-- Double-check your `.env` file. Make sure there are no extra spaces around the `=` signs.
+- Re-run `python3 setup.py` and choose to reconfigure when prompted. Check that there are no extra spaces around the values.
 
 **The browser opened but the terminal timed out**
-- Make sure port 8888 is not blocked or in use by another process. Try running `auth.py` again.
+- Make sure port 8888 is not blocked or in use by another process. Re-run `python3 setup.py` — it will skip steps already completed and retry the auth.
+
+**Need to re-authenticate**
+- Delete `.cache` and run `python3 setup.py` again. All other steps will be skipped automatically.
