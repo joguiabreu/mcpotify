@@ -34,6 +34,10 @@ Do not add new scopes without updating both `server.py` and `auth.py`.
 
 All Spotify API calls go through the `_spotify()` helper in `server.py`, which implements exponential backoff with the `Retry-After` header on HTTP 429 responses. Never call `sp.*` methods directly with `asyncio.to_thread` — always use `_spotify()`.
 
+## Deprecated Fields
+
+On `GET /artists/{id}`, the `genres`, `followers`, and `popularity` fields are individually marked deprecated in the OpenAPI spec. Do not expose them in tool output.
+
 ## Deprecated Endpoints
 
 Do not use deprecated endpoints. Known deprecated endpoints that must not be used:

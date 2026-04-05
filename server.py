@@ -77,6 +77,71 @@ async def list_tools() -> list[types.Tool]:
             },
         ),
         types.Tool(
+            name="search_artists",
+            description=(
+                "Search Spotify for artists by name. Returns artist names and URIs. "
+                "Use the URI with get_artist_albums to browse their discography."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Artist name or search query"},
+                    "limit": {"type": "integer", "description": "Number of results (1–50, default 10)", "default": 10},
+                },
+                "required": ["query"],
+            },
+        ),
+        types.Tool(
+            name="search_albums",
+            description=(
+                "Search Spotify for albums. Returns album names, artists, release year, and URIs. "
+                "Use the URI with get_album_tracks to get the full tracklist."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Album name, artist, or search query"},
+                    "limit": {"type": "integer", "description": "Number of results (1–50, default 10)", "default": 10},
+                },
+                "required": ["query"],
+            },
+        ),
+        types.Tool(
+            name="get_artist_albums",
+            description=(
+                "Get all albums by an artist. Returns album names, release years, and URIs. "
+                "Use search_artists to get the artist URI first. "
+                "Use the album URIs with get_album_tracks to get full tracklists."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "artist_uri": {"type": "string", "description": "Spotify artist URI or ID"},
+                    "include_groups": {
+                        "type": "array",
+                        "items": {"type": "string", "enum": ["album", "single", "appears_on", "compilation"]},
+                        "description": "Album types to include (default: ['album', 'single'])",
+                    },
+                    "limit": {"type": "integer", "description": "Number of albums to return (1–50, default 20)", "default": 20},
+                },
+                "required": ["artist_uri"],
+            },
+        ),
+        types.Tool(
+            name="get_album_tracks",
+            description=(
+                "Get all tracks in an album, in order. Returns track names, artists, and URIs. "
+                "Use search_albums or get_artist_albums to get the album URI first."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "album_uri": {"type": "string", "description": "Spotify album URI or ID"},
+                },
+                "required": ["album_uri"],
+            },
+        ),
+        types.Tool(
             name="create_playlist",
             description="Create a Spotify playlist and populate it with tracks.",
             inputSchema={
@@ -303,6 +368,114 @@ async def search_tracks(args: dict) -> list[types.TextContent]:
         return [types.TextContent(type="text", text="No tracks found.")]
 
     lines = [_format_track(i, t) for i, t in enumerate(tracks, 1)]
+    return [types.TextContent(type="text", text="\n\n".join(lines))]
+
+
+@tool_handler("search_artists")
+async def search_artists(args: dict) -> list[types.TextContent]:
+    query = args["query"]
+    limit = args.get("limit", 10)
+
+    t0 = time.perf_counter()
+    try:
+        results = await _spotify(sp.search, q=query, type="artist", limit=limit)
+    except Exception:
+        log.error("sp.search(artist) failed (%.2fs)\n%s", time.perf_counter() - t0, traceback.format_exc())
+        raise
+    log.debug("sp.search(artist) returned in %.2fs", time.perf_counter() - t0)
+
+    artists = results["artists"]["items"]
+    if not artists:
+        return [types.TextContent(type="text", text="No artists found.")]
+
+    lines = []
+    for i, a in enumerate(artists, 1):
+        lines.append(f"{i}. {a['name']}\n   URI: {a['uri']}")
+    return [types.TextContent(type="text", text="\n\n".join(lines))]
+
+
+@tool_handler("search_albums")
+async def search_albums(args: dict) -> list[types.TextContent]:
+    query = args["query"]
+    limit = args.get("limit", 10)
+
+    t0 = time.perf_counter()
+    try:
+        results = await _spotify(sp.search, q=query, type="album", limit=limit)
+    except Exception:
+        log.error("sp.search(album) failed (%.2fs)\n%s", time.perf_counter() - t0, traceback.format_exc())
+        raise
+    log.debug("sp.search(album) returned in %.2fs", time.perf_counter() - t0)
+
+    albums = results["albums"]["items"]
+    if not albums:
+        return [types.TextContent(type="text", text="No albums found.")]
+
+    lines = []
+    for i, album in enumerate(albums, 1):
+        artist = ", ".join(a["name"] for a in album["artists"])
+        year = album["release_date"][:4]
+        lines.append(f"{i}. {album['name']} — {artist} ({year})\n   URI: {album['uri']}")
+    return [types.TextContent(type="text", text="\n\n".join(lines))]
+
+
+@tool_handler("get_artist_albums")
+async def get_artist_albums(args: dict) -> list[types.TextContent]:
+    artist_uri = args["artist_uri"]
+    artist_id = artist_uri.split(":")[-1] if ":" in artist_uri else artist_uri
+    include_groups = ",".join(args.get("include_groups", ["album", "single"]))
+    limit = args.get("limit", 20)
+
+    t0 = time.perf_counter()
+    try:
+        results = await _spotify(sp.artist_albums, artist_id, album_type=include_groups, limit=limit)
+    except Exception:
+        log.error("sp.artist_albums failed (%.2fs)\n%s", time.perf_counter() - t0, traceback.format_exc())
+        raise
+    log.debug("sp.artist_albums returned in %.2fs", time.perf_counter() - t0)
+
+    albums = results["items"]
+    if not albums:
+        return [types.TextContent(type="text", text="No albums found for this artist.")]
+
+    lines = []
+    for i, album in enumerate(albums, 1):
+        year = album["release_date"][:4]
+        lines.append(f"{i}. {album['name']} ({album['album_type']}, {year})\n   URI: {album['uri']}")
+    return [types.TextContent(type="text", text="\n\n".join(lines))]
+
+
+@tool_handler("get_album_tracks")
+async def get_album_tracks(args: dict) -> list[types.TextContent]:
+    album_uri = args["album_uri"]
+    album_id = album_uri.split(":")[-1] if ":" in album_uri else album_uri
+
+    t0 = time.perf_counter()
+    try:
+        results = await _spotify(sp.album_tracks, album_id, limit=50)
+    except Exception:
+        log.error("sp.album_tracks failed (%.2fs)\n%s", time.perf_counter() - t0, traceback.format_exc())
+        raise
+    log.debug("sp.album_tracks returned in %.2fs", time.perf_counter() - t0)
+
+    tracks = results["items"]
+    if not tracks:
+        return [types.TextContent(type="text", text="No tracks found for this album.")]
+
+    # album_tracks returns simplified track objects (no album field), build format manually
+    lines = []
+    for i, t in enumerate(tracks, 1):
+        artists = ", ".join(a["name"] for a in t["artists"])
+        lines.append(f"{i}. {t['name']} — {artists}\n   URI: {t['uri']}")
+
+    # paginate if album has more than 50 tracks
+    while results.get("next"):
+        results = await _spotify(sp.next, results)
+        for t in results["items"]:
+            i += 1
+            artists = ", ".join(a["name"] for a in t["artists"])
+            lines.append(f"{i}. {t['name']} — {artists}\n   URI: {t['uri']}")
+
     return [types.TextContent(type="text", text="\n\n".join(lines))]
 
 
