@@ -4,9 +4,10 @@ This connects your AI assistant to your Spotify account via the [Model Context P
 
 - *"Make me a relaxing playlist for studying"*
 - *"Find 20 upbeat songs similar to Daft Punk and create a playlist called Friday Night"*
-- *"Recommend tracks like Radiohead but more acoustic"*
+- *"Queue 10 songs that match the vibe of what I'm currently listening to"*
+- *"What are my top artists this month? Queue something in that style."*
 
-The AI will search Spotify, pick tracks, and create the playlist directly in your account.
+The AI will search Spotify, pick tracks, and create playlists or queue songs directly in your account.
 
 ---
 
@@ -49,7 +50,7 @@ You need to tell Spotify that a program is allowed to access your account. This 
 3. Fill in the form:
    - **App name:** anything you like, e.g. `My Spotify MCP`
    - **App description:** anything, e.g. `Personal use`
-   - **Redirect URI:** paste this exactly: `https://oauth.pstmn.io/v1/callback`
+   - **Redirect URI:** paste this exactly: `http://127.0.0.1:8888/callback`
    - Check the **Web API** checkbox
 4. Click **Save**.
 5. On the next page, click **Settings** (top right).
@@ -63,7 +64,7 @@ Inside the project folder, create a file called `.env` (exactly that name, with 
 ```
 SPOTIFY_CLIENT_ID=paste_your_client_id_here
 SPOTIFY_CLIENT_SECRET=paste_your_client_secret_here
-SPOTIFY_REDIRECT_URI=https://oauth.pstmn.io/v1/callback
+SPOTIFY_REDIRECT_URI=http://127.0.0.1:8888/callback
 ```
 
 Save the file.
@@ -97,7 +98,7 @@ Still in the terminal, run:
 python3 auth.py
 ```
 
-A browser window will open asking you to log in to Spotify and approve access. After you approve it, you'll be redirected to a page that may look broken — that's fine. Copy the full URL from your browser's address bar, paste it back into the terminal, and press Enter.
+A browser window will open asking you to log in to Spotify and approve access. After you approve it, the browser will show a success message and the terminal will confirm the login. That's it — no copying or pasting URLs.
 
 This only happens once. After that, your AI assistant handles everything automatically.
 
@@ -134,6 +135,8 @@ Add the following to your MCP config file (`.cursor/mcp.json` for Cursor):
 Open your AI app and try asking:
 
 > *"Search for some dreamy shoegaze tracks and make a playlist called Dream Pop"*
+> *"Queue 10 songs that match the vibe of what I'm listening to right now"*
+> *"What are my top artists this month? Queue something similar but more upbeat."*
 
 ---
 
@@ -146,5 +149,5 @@ Open your AI app and try asking:
 **"Invalid client" or "credentials" error**
 - Double-check your `.env` file. Make sure there are no extra spaces around the `=` signs.
 
-**The browser opened but nothing happened after I approved**
-- Copy the full URL from the browser address bar (even if the page looks broken) and paste it into the terminal.
+**The browser opened but the terminal timed out**
+- Make sure port 8888 is not blocked or in use by another process. Try running `auth.py` again.
