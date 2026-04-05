@@ -104,10 +104,33 @@ async def list_tools() -> list[types.Tool]:
             inputSchema={"type": "object", "properties": {}},
         ),
         types.Tool(
+            name="queue_tracks",
+            description=(
+                "Add specific tracks to the Spotify playback queue by URI. "
+                "Requires Spotify Premium. "
+                "Use this when you already have track URIs from search_tracks. "
+                "Prefer this over queue_recommendations when you want to queue specific known tracks."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "track_uris": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of Spotify track URIs to queue, e.g. ['spotify:track:abc123']",
+                    },
+                },
+                "required": ["track_uris"],
+            },
+        ),
+        types.Tool(
             name="queue_recommendations",
             description=(
                 "Search for tracks matching a query and add them to the Spotify playback queue. "
                 "Requires Spotify Premium. "
+                "Use this when you don't have specific track URIs yet. "
+                "If you already know which tracks to queue, use search_tracks to get their URIs, "
+                "then queue_tracks — it's fewer calls and more precise. "
                 "If no query is provided, automatically builds one from the currently playing track. "
                 "QUERY STRATEGY: Spotify search matches text literally against track and artist names — "
                 "mood adjectives (e.g. 'dreamy', 'melancholic') will match song titles, not audio style. "
@@ -320,6 +343,31 @@ async def get_current_playing(args: dict) -> list[types.TextContent]:
 
     return [types.TextContent(type="text", text=f"{status}: {name} — {artists}\nTrack URI: {uri}\nArtist URI: {artist_uri}")]
 
+
+
+@tool_handler("queue_tracks")
+async def queue_tracks(args: dict) -> list[types.TextContent]:
+    track_uris = args["track_uris"]
+
+    seen: set[str] = set()
+    unique_uris = [u for u in track_uris if not (u in seen or seen.add(u))]
+
+    queued = []
+    failed = []
+    for uri in unique_uris:
+        try:
+            await _spotify(sp.add_to_queue, uri)
+            queued.append(uri)
+        except spotipy.SpotifyException as e:
+            if e.http_status == 403:
+                return [types.TextContent(type="text", text="Spotify Premium is required to add tracks to the queue.")]
+            failed.append(uri)
+            log.warning("Failed to queue %s: %s", uri, e)
+
+    summary = f"Queued {len(queued)} track(s)."
+    if failed:
+        summary += f" {len(failed)} failed: {', '.join(failed)}"
+    return [types.TextContent(type="text", text=summary)]
 
 
 @tool_handler("queue_recommendations")
