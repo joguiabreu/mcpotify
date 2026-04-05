@@ -158,6 +158,28 @@ async def list_tools() -> list[types.Tool]:
             },
         ),
         types.Tool(
+            name="add_to_playlist",
+            description=(
+                "Add tracks to an existing Spotify playlist. "
+                "Use list_my_playlists to get playlist IDs, and search_tracks to get track URIs."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "playlist_id": {
+                        "type": "string",
+                        "description": "Spotify playlist ID (from list_my_playlists)",
+                    },
+                    "track_uris": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of Spotify track URIs to add",
+                    },
+                },
+                "required": ["playlist_id", "track_uris"],
+            },
+        ),
+        types.Tool(
             name="get_my_top_tracks",
             description="Get the user's most listened-to tracks. Useful as seeds for personalized recommendations.",
             inputSchema={
@@ -318,6 +340,51 @@ async def create_playlist(args: dict) -> list[types.TextContent]:
 
     url = playlist["external_urls"]["spotify"]
     return [types.TextContent(type="text", text=f"Playlist '{name}' created with {len(track_uris)} track(s).\n{url}")]
+
+
+@tool_handler("add_to_playlist")
+async def add_to_playlist(args: dict) -> list[types.TextContent]:
+    playlist_id = args["playlist_id"]
+    track_uris = args["track_uris"]
+
+    # Fetch all existing track URIs in the playlist (paginated)
+    existing_uris: set[str] = set()
+    try:
+        page = await _spotify(sp.playlist_items, playlist_id, fields="items(track(uri)),next", limit=100)
+        while page:
+            for item in page["items"]:
+                if item and item.get("track") and item["track"].get("uri"):
+                    existing_uris.add(item["track"]["uri"])
+            next_page = page.get("next")
+            page = await _spotify(sp.next, page) if next_page else None
+    except Exception:
+        log.error("Failed to fetch existing playlist tracks\n%s", traceback.format_exc())
+        raise
+
+    new_uris = [u for u in track_uris if u not in existing_uris]
+    skipped = len(track_uris) - len(new_uris)
+
+    if not new_uris:
+        return [types.TextContent(type="text", text=f"All {len(track_uris)} track(s) are already in the playlist — nothing added.")]
+
+    for i in range(0, len(new_uris), 100):
+        batch = new_uris[i: i + 100]
+        log.debug("add_to_playlist | playlist=%s batch %d–%d", playlist_id, i, i + len(batch))
+        t0 = time.perf_counter()
+        try:
+            await _spotify(sp.playlist_add_items, playlist_id, batch)
+        except Exception:
+            log.error("sp.playlist_add_items failed at offset %d (%.2fs)\n%s", i, time.perf_counter() - t0, traceback.format_exc())
+            raise
+        log.debug("Batch added (%.2fs)", time.perf_counter() - t0)
+
+    total = len(track_uris)
+    added = len(new_uris)
+    if skipped:
+        msg = f"Added {added}/{total} tracks ({skipped} already in playlist, skipped)."
+    else:
+        msg = f"Added {added} tracks."
+    return [types.TextContent(type="text", text=msg)]
 
 
 @tool_handler("get_current_playing")
