@@ -177,6 +177,15 @@ Open your AI app and try one of these to get started:
 
 ## Troubleshooting
 
+**Claude asks for permission before every Spotify action**
+This is Claude Code's default behaviour. To allow all Spotify tools automatically, add the following to `~/.claude/settings.json`:
+```json
+"permissions": {
+  "allow": ["mcp__spotify__*"]
+}
+```
+Then restart Claude Code.
+
 **The AI says it doesn't have Spotify tools**
 Make sure `setup.py` completed without errors, then restart the app and try again.
 
