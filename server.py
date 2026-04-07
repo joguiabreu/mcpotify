@@ -32,6 +32,7 @@ log = logging.getLogger("mcp-spotify")
 # --- Spotify client setup ---
 log.info("Initialising Spotify OAuth client")
 try:
+    _cache_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".cache")
     sp = spotipy.Spotify(
         auth_manager=SpotifyOAuth(
             client_id=os.getenv("SPOTIFY_CLIENT_ID"),
@@ -46,6 +47,7 @@ try:
                 "user-modify-playback-state",
                 "user-top-read",
             ]),
+            cache_path=_cache_path,
         )
     )
     log.info("Spotify OAuth client ready")
