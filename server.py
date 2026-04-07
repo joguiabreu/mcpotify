@@ -284,6 +284,60 @@ async def list_tools() -> list[types.Tool]:
                 },
             },
         ),
+        types.Tool(
+            name="get_playlist_tracks",
+            description=(
+                "Get all tracks in a Spotify playlist, in order. Returns track names, artists, and URIs. "
+                "Use list_my_playlists to get the playlist ID first."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "playlist_id": {"type": "string", "description": "Spotify playlist ID (from list_my_playlists)"},
+                },
+                "required": ["playlist_id"],
+            },
+        ),
+        types.Tool(
+            name="remove_from_playlist",
+            description=(
+                "Remove tracks from a Spotify playlist. "
+                "Use list_my_playlists to get the playlist ID and get_playlist_tracks to get track URIs."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "playlist_id": {
+                        "type": "string",
+                        "description": "Spotify playlist ID (from list_my_playlists)",
+                    },
+                    "track_uris": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of Spotify track URIs to remove",
+                    },
+                },
+                "required": ["playlist_id", "track_uris"],
+            },
+        ),
+        types.Tool(
+            name="control_playback",
+            description=(
+                "Control Spotify playback. Requires Spotify Premium. "
+                "Actions: play (resume), pause, skip_next (next track), skip_previous (previous track)."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["play", "pause", "skip_next", "skip_previous"],
+                        "description": "Playback action to perform",
+                    },
+                },
+                "required": ["action"],
+            },
+        ),
     ]
 
 
@@ -702,8 +756,7 @@ async def get_my_top_artists(args: dict) -> list[types.TextContent]:
 
     lines = []
     for i, artist in enumerate(artists, 1):
-        genres = ", ".join(artist["genres"][:3]) if artist["genres"] else "—"
-        lines.append(f"{i}. {artist['name']} (genres: {genres})\n   URI: {artist['uri']}")
+        lines.append(f"{i}. {artist['name']}\n   URI: {artist['uri']}")
 
     label = {"short_term": "last 4 weeks", "medium_term": "last 6 months", "long_term": "all time"}[time_range]
     return [types.TextContent(type="text", text=f"Your top artists ({label}):\n\n" + "\n\n".join(lines))]
@@ -734,6 +787,68 @@ async def list_my_playlists(args: dict) -> list[types.TextContent]:
         lines.append(f"{i}. {name} ({total} tracks) — owner: {owner}\n   ID: {pid}")
 
     return [types.TextContent(type="text", text=f"Your playlists:\n\n" + "\n\n".join(lines))]
+
+
+@tool_handler("get_playlist_tracks")
+async def get_playlist_tracks(args: dict) -> list[types.TextContent]:
+    playlist_id = args["playlist_id"]
+
+    lines = []
+    i = 0
+    try:
+        page = await _spotify(sp.playlist_items, playlist_id, fields="items(track(name,artists,uri)),next", limit=100)
+    except Exception:
+        log.error("sp.playlist_items failed\n%s", traceback.format_exc())
+        raise
+
+    while page:
+        for item in page["items"]:
+            track = item.get("track") if item else None
+            if not track or not track.get("uri") or track["uri"].startswith("spotify:local:"):
+                continue
+            i += 1
+            artists = ", ".join(a["name"] for a in track["artists"])
+            lines.append(f"{i}. {track['name']} — {artists}\n   URI: {track['uri']}")
+        page = await _spotify(sp.next, page) if page.get("next") else None
+
+    if not lines:
+        return [types.TextContent(type="text", text="No tracks found in this playlist.")]
+    return [types.TextContent(type="text", text="\n\n".join(lines))]
+
+
+@tool_handler("remove_from_playlist")
+async def remove_from_playlist(args: dict) -> list[types.TextContent]:
+    playlist_id = args["playlist_id"]
+    track_uris = args["track_uris"]
+
+    try:
+        await _spotify(sp.playlist_remove_all_occurrences_of_items, playlist_id, track_uris)
+    except Exception:
+        log.error("sp.playlist_remove_all_occurrences_of_items failed\n%s", traceback.format_exc())
+        raise
+
+    return [types.TextContent(type="text", text=f"Removed {len(track_uris)} track(s) from the playlist.")]
+
+
+@tool_handler("control_playback")
+async def control_playback(args: dict) -> list[types.TextContent]:
+    action = args["action"]
+    _actions = {
+        "play": sp.start_playback,
+        "pause": sp.pause_playback,
+        "skip_next": sp.next_track,
+        "skip_previous": sp.previous_track,
+    }
+    fn = _actions[action]
+    try:
+        await _spotify(fn)
+    except spotipy.SpotifyException as e:
+        if e.http_status == 403:
+            return [types.TextContent(type="text", text="Spotify Premium is required to control playback.")]
+        raise
+
+    labels = {"play": "Resumed", "pause": "Paused", "skip_next": "Skipped to next track", "skip_previous": "Skipped to previous track"}
+    return [types.TextContent(type="text", text=f"{labels[action]}.")]
 
 
 # --- Entry point ---

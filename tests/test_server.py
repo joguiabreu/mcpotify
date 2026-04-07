@@ -394,6 +394,105 @@ class TestGetMyTopArtists:
 
 
 # ---------------------------------------------------------------------------
+# get_playlist_tracks
+# ---------------------------------------------------------------------------
+
+class TestGetPlaylistTracks:
+    def _page(self, tracks, next_url=None):
+        return {"items": [{"track": t} for t in tracks], "next": next_url}
+
+    async def test_returns_tracks(self):
+        server.sp.playlist_items.return_value = self._page([_track()])
+        result = await _handlers["get_playlist_tracks"]({"playlist_id": "pl1"})
+        assert "Track A" in result[0].text
+        assert "spotify:track:aaa" in result[0].text
+
+    async def test_empty_playlist(self):
+        server.sp.playlist_items.return_value = self._page([])
+        result = await _handlers["get_playlist_tracks"]({"playlist_id": "pl1"})
+        assert result[0].text == "No tracks found in this playlist."
+
+    async def test_skips_local_tracks(self):
+        local = {"name": "Local", "artists": [{"name": "Me"}], "uri": "spotify:local:x"}
+        server.sp.playlist_items.return_value = self._page([local])
+        result = await _handlers["get_playlist_tracks"]({"playlist_id": "pl1"})
+        assert result[0].text == "No tracks found in this playlist."
+
+    async def test_skips_null_items(self):
+        page = {"items": [None, {"track": None}, {"track": _track()}], "next": None}
+        server.sp.playlist_items.return_value = page
+        result = await _handlers["get_playlist_tracks"]({"playlist_id": "pl1"})
+        assert "Track A" in result[0].text
+
+    async def test_pagination(self):
+        page1 = {"items": [{"track": _track("T1", uri="spotify:track:t1")}], "next": "page2"}
+        page2 = {"items": [{"track": _track("T2", uri="spotify:track:t2")}], "next": None}
+        server.sp.playlist_items.return_value = page1
+        server.sp.next.return_value = page2
+        result = await _handlers["get_playlist_tracks"]({"playlist_id": "pl1"})
+        assert "T1" in result[0].text
+        assert "T2" in result[0].text
+
+
+# ---------------------------------------------------------------------------
+# remove_from_playlist
+# ---------------------------------------------------------------------------
+
+class TestRemoveFromPlaylist:
+    async def test_removes_tracks(self):
+        server.sp.playlist_remove_all_occurrences_of_items.return_value = None
+        result = await _handlers["remove_from_playlist"](
+            {"playlist_id": "pl1", "track_uris": ["spotify:track:a", "spotify:track:b"]}
+        )
+        server.sp.playlist_remove_all_occurrences_of_items.assert_called_once_with(
+            "pl1", ["spotify:track:a", "spotify:track:b"]
+        )
+        assert "Removed 2" in result[0].text
+
+    async def test_single_track(self):
+        server.sp.playlist_remove_all_occurrences_of_items.return_value = None
+        result = await _handlers["remove_from_playlist"](
+            {"playlist_id": "pl1", "track_uris": ["spotify:track:a"]}
+        )
+        assert "Removed 1" in result[0].text
+
+
+# ---------------------------------------------------------------------------
+# control_playback
+# ---------------------------------------------------------------------------
+
+class TestControlPlayback:
+    async def test_play(self):
+        server.sp.start_playback.return_value = None
+        result = await _handlers["control_playback"]({"action": "play"})
+        server.sp.start_playback.assert_called_once()
+        assert "Resumed" in result[0].text
+
+    async def test_pause(self):
+        server.sp.pause_playback.return_value = None
+        result = await _handlers["control_playback"]({"action": "pause"})
+        server.sp.pause_playback.assert_called_once()
+        assert "Paused" in result[0].text
+
+    async def test_skip_next(self):
+        server.sp.next_track.return_value = None
+        result = await _handlers["control_playback"]({"action": "skip_next"})
+        server.sp.next_track.assert_called_once()
+        assert "next track" in result[0].text
+
+    async def test_skip_previous(self):
+        server.sp.previous_track.return_value = None
+        result = await _handlers["control_playback"]({"action": "skip_previous"})
+        server.sp.previous_track.assert_called_once()
+        assert "previous track" in result[0].text
+
+    async def test_403_returns_premium_message(self):
+        server.sp.start_playback.side_effect = spotipy.SpotifyException(403, -1, "Forbidden")
+        result = await _handlers["control_playback"]({"action": "play"})
+        assert "Premium" in result[0].text
+
+
+# ---------------------------------------------------------------------------
 # _spotify retry logic
 # ---------------------------------------------------------------------------
 
