@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import logging.handlers
 import os
 import random
 import time
@@ -19,7 +20,11 @@ _log_path = os.path.join(os.path.dirname(__file__), "mcp-spotify.log")
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[logging.FileHandler(_log_path, encoding="utf-8")],
+    handlers=[
+        logging.handlers.RotatingFileHandler(
+            _log_path, maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8"
+        )
+    ],
 )
 log = logging.getLogger("mcp-spotify")
 
