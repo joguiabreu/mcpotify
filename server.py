@@ -326,6 +326,24 @@ async def list_tools() -> list[types.Tool]:
             },
         ),
         types.Tool(
+            name="delete_playlist",
+            description=(
+                "Remove a playlist from the current user's library. "
+                "This is irreversible — always confirm with the user before calling this. "
+                "Use list_my_playlists to get the playlist ID."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "playlist_id": {
+                        "type": "string",
+                        "description": "Spotify playlist ID (from list_my_playlists)",
+                    },
+                },
+                "required": ["playlist_id"],
+            },
+        ),
+        types.Tool(
             name="control_playback",
             description=(
                 "Control Spotify playback. Requires Spotify Premium. "
@@ -833,6 +851,17 @@ async def remove_from_playlist(args: dict) -> list[types.TextContent]:
         raise
 
     return [types.TextContent(type="text", text=f"Removed {len(track_uris)} track(s) from the playlist.")]
+
+
+@tool_handler("delete_playlist")
+async def delete_playlist(args: dict) -> list[types.TextContent]:
+    playlist_id = args["playlist_id"]
+    try:
+        await _spotify(sp.current_user_unfollow_playlist, playlist_id)
+    except Exception:
+        log.error("sp.current_user_unfollow_playlist failed\n%s", traceback.format_exc())
+        raise
+    return [types.TextContent(type="text", text="Playlist removed from your library.")]
 
 
 @tool_handler("control_playback")

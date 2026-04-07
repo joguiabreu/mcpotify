@@ -458,6 +458,17 @@ class TestRemoveFromPlaylist:
 
 
 # ---------------------------------------------------------------------------
+# delete_playlist
+# ---------------------------------------------------------------------------
+
+class TestDeletePlaylist:
+    async def test_deletes_playlist(self):
+        server.sp.current_user_unfollow_playlist.return_value = None
+        result = await _handlers["delete_playlist"]({"playlist_id": "pl1"})
+        server.sp.current_user_unfollow_playlist.assert_called_once_with("pl1")
+        assert "removed" in result[0].text
+
+# ---------------------------------------------------------------------------
 # control_playback
 # ---------------------------------------------------------------------------
 
