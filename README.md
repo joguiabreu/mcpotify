@@ -1,6 +1,6 @@
 # Spotify MCP
 
-Control Spotify with plain English through your AI assistant. Search for music, build playlists, manage your queue, and control playback — just by asking.
+Control Spotify through your AI assistant using plain language — ask in any language your AI supports. Search for music, build playlists, manage your queue, and control playback — just by asking.
 
 > *"Make me a dark, rainy day playlist with 20 tracks"*
 > *"Queue something similar to what I'm listening to right now"*
@@ -190,4 +190,4 @@ Another program may be using the same port. Try restarting your computer, then r
 These features require Spotify Premium.
 
 **Need to re-authenticate**
-Delete the `.cache` file in the project folder and run `python3 setup.py` again.
+Run `python3 reauth.py` from the project folder. It will open a browser, ask you to log in to Spotify, and save a fresh token. Then restart your AI app.
