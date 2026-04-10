@@ -2,6 +2,7 @@
 .venv
 .cache
 *.log
+*.log.*
 __pycache__/
 .pytest_cache/
 .mcp.json
