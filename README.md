@@ -165,6 +165,32 @@ Paste the following, replacing the paths with your actual project location:
 
 ---
 
+## Claude Code skill (optional)
+
+This project includes a `/spotify` skill for Claude Code — a built-in guide that tells Claude exactly how to use the Spotify tools. It improves the quality and consistency of responses, especially for multi-step tasks like building playlists or queuing by mood.
+
+The skill is already available if you're working inside this project folder. To use it, type `/spotify` at the start of a prompt:
+
+> `/spotify queue something dreamy and slow`
+
+**Making the skill available everywhere**
+
+By default the skill only works when Claude Code is open in this project folder. To use it from any directory, copy it to your global Claude commands folder:
+
+**Mac / Linux:**
+```
+cp .claude/commands/spotify.md ~/.claude/commands/spotify.md
+```
+
+**Windows:**
+```
+copy .claude\commands\spotify.md %USERPROFILE%\.claude\commands\spotify.md
+```
+
+After copying, `/spotify` will work in any Claude Code session regardless of what project you have open.
+
+---
+
 ## Try it out
 
 Open your AI app and try one of these to get started:
