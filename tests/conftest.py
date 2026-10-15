@@ -1,22 +1,23 @@
 """
-Patch the Spotify client before server.py is imported so the module-level
-SpotifyOAuth flow never runs during tests.
+Every test gets a fresh mock Spotify client, and a login cache path inside the
+test's temp dir so nothing reads or writes the real .cache.
 """
+from unittest.mock import MagicMock
+
 import pytest
-from unittest.mock import MagicMock, patch
 
-_mock_sp = MagicMock()
-
-with patch("spotipy.Spotify", return_value=_mock_sp), \
-     patch("spotipy.oauth2.SpotifyOAuth", return_value=MagicMock()):
-    import server  # noqa: E402  (import not at top of file is intentional)
-
-# Ensure server.sp points to our controllable mock
-server.sp = _mock_sp
+import server
+import spotify_auth
 
 
 @pytest.fixture(autouse=True)
-def reset_sp():
-    """Reset the Spotify mock before every test so calls and side_effects don't bleed."""
-    server.sp.reset_mock(side_effect=True, return_value=True)
+def sp(monkeypatch):
+    mock = MagicMock()
+    monkeypatch.setattr(server, "sp", mock)
+    return mock
 
+
+@pytest.fixture(autouse=True)
+def isolated_login_cache(monkeypatch, tmp_path):
+    monkeypatch.setattr(spotify_auth, "CACHE_PATH", tmp_path / ".cache")
+    return tmp_path / ".cache"
