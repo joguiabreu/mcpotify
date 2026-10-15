@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
-One-command setup for mcp-spotify.
+One-command setup for mcp-spotify. Safe to re-run: it skips steps that are already done.
 
 Usage:
-    python setup.py
+    python install.py
 """
-import os
 import platform
+import shlex
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -17,7 +18,6 @@ VENV = ROOT / ".venv"
 PYTHON = VENV / ("Scripts/python.exe" if IS_WINDOWS else "bin/python")
 PIP = VENV / ("Scripts/pip.exe" if IS_WINDOWS else "bin/pip")
 ENV_FILE = ROOT / ".env"
-CACHE_FILE = ROOT / ".cache"
 
 
 # --- Output helpers ---
@@ -54,6 +54,7 @@ def setup_env():
     if ENV_FILE.exists():
         reconfigure = input("  .env already exists. Reconfigure? [y/N] ").strip().lower()
         if reconfigure != "y":
+            ENV_FILE.chmod(0o600)  # it holds the client secret
             _ok("Keeping existing .env")
             return
 
@@ -69,10 +70,11 @@ def setup_env():
     if not client_id or not client_secret:
         _fail("Client ID and Client Secret are required.")
 
+    ENV_FILE.touch(mode=0o600)
+    ENV_FILE.chmod(0o600)  # it holds the client secret
     ENV_FILE.write_text(
         f"SPOTIFY_CLIENT_ID={client_id}\n"
         f"SPOTIFY_CLIENT_SECRET={client_secret}\n"
-        f"SPOTIFY_REDIRECT_URI=http://127.0.0.1:8888/callback\n"
     )
     _ok(".env written")
 
@@ -97,28 +99,68 @@ def install_deps():
 
 def run_auth():
     _step("Spotify authentication")
-    if CACHE_FILE.exists():
-        _ok("Already authenticated (.cache exists)")
-        return
-    print("  A browser window will open — approve access and wait for confirmation.\n")
-    subprocess.run([str(PYTHON), str(ROOT / "auth.py")], check=True)
+    print("  If a browser window opens, approve access and wait for the confirmation page.\n")
+    # auth.py skips the browser when a valid login with every permission is already saved.
+    if subprocess.run([str(PYTHON), str(ROOT / "auth.py")], cwd=ROOT).returncode != 0:
+        _fail("Spotify sign-in didn't complete. Fix the problem above and re-run install.py.")
+
+
+def _find_claude():
+    """Return the path to the Claude Code CLI, or None if it can't be found.
+
+    Falls back to the binary bundled with the VS Code / Cursor / Windsurf
+    extension, since extension-only installs don't put `claude` on PATH.
+    """
+    on_path = shutil.which("claude")
+    if on_path:
+        return on_path
+    exe = "claude.exe" if IS_WINDOWS else "claude"
+    candidates = []
+    for editor in (".vscode", ".vscode-insiders", ".cursor", ".windsurf"):
+        ext_dir = Path.home() / editor / "extensions"
+        candidates += ext_dir.glob(f"anthropic.claude-code-*/resources/native-binary/{exe}")
+    if not candidates:
+        return None
+    # Prefer the most recently installed extension version
+    return str(max(candidates, key=lambda p: p.stat().st_mtime))
+
+
+def _shell_join(args):
+    return subprocess.list2cmdline(args) if IS_WINDOWS else shlex.join(args)
 
 
 def register_mcp():
     _step("Registering MCP server with Claude Code")
-    result = subprocess.run(
-        ["claude", "mcp", "add", "--scope", "user", "spotify",
-         str(PYTHON), str(ROOT / "server.py")],
-        capture_output=True,
-        text=True,
-    )
+    add_args = ["mcp", "add", "--scope", "user", "spotify",
+                str(PYTHON), str(ROOT / "server.py")]
+
+    def print_manual(claude="claude"):
+        print("\n  To register it yourself, run:\n")
+        print(f"  {_shell_join([claude] + add_args)}\n")
+
+    claude = _find_claude()
+    if not claude:
+        _warn("Claude Code CLI not found.")
+        print("  Install it from https://claude.com/claude-code, or skip this if you use another AI app.")
+        print_manual()
+        return
+
+    if subprocess.run([claude, "mcp", "get", "spotify"], capture_output=True).returncode == 0:
+        _ok("MCP server already registered")
+        return
+
+    answer = input("  Register the Spotify server with Claude Code now? [Y/n] ").strip().lower()
+    if answer not in ("", "y", "yes"):
+        print_manual(claude)
+        return
+
+    result = subprocess.run([claude] + add_args, capture_output=True, text=True)
     if result.returncode == 0:
         _ok("MCP server registered")
-    elif "already" in (result.stdout + result.stderr).lower():
-        _ok("MCP server already registered")
     else:
-        _warn("Could not register automatically. Run this manually:")
-        print(f"\n  claude mcp add --scope user spotify {PYTHON} {ROOT / 'server.py'}\n")
+        _warn("Could not register automatically:")
+        print(f"  {(result.stderr or result.stdout).strip()}")
+        print_manual(claude)
 
 
 # --- Entry point ---
